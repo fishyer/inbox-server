@@ -1,5 +1,6 @@
 # 用 playwright 官方镜像（已预装 chromium + 全套系统依赖），避免 install 网络/超时卡住
-FROM mcr.microsoft.com/playwright/python:1.60
+# tag 格式 v{version}（不是 1.60，是 v1.60.0）
+FROM mcr.microsoft.com/playwright/python:v1.60.0
 
 # xvfb（headed 必需）+ curl
 RUN apt-get update && apt-get install -y --no-install-recommends xvfb curl \
