@@ -1,33 +1,37 @@
 """渠道配置：解析 channels.yaml（声明启用的 source/destination + 参数 + 凭据引用）。
 
 ${ENV} 从环境变量插值（凭据不落 yaml 明文）。
+P1-6：Pydantic BaseModel 替换 dataclass（启动时强类型校验，fail-fast）。
 """
 
 from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
+
+from pydantic import BaseModel, Field
 
 _ENV_RE = re.compile(r"\$\{([^}]+)\}")
 
 
-@dataclass
-class ChannelEntry:
+class ChannelEntry(BaseModel):
+    """单个渠道配置（source 或 destination）。Pydantic 校验字段类型。"""
+
     enabled: bool = False
-    config: dict = field(default_factory=dict)
+    config: dict[str, str] = Field(default_factory=dict)
     kind: str | None = None  # source: api/browser
     item_kind: str | None = None  # destination: link/text/file
     credential_ref: str | None = None
 
 
-@dataclass
-class ChannelsConfig:
-    sources: dict[str, ChannelEntry] = field(default_factory=dict)
-    destinations: dict[str, ChannelEntry] = field(default_factory=dict)
-    credentials: dict[str, dict] = field(default_factory=dict)
-    llm: dict = field(default_factory=dict)
+class ChannelsConfig(BaseModel):
+    """全量渠道配置。"""
+
+    sources: dict[str, ChannelEntry] = Field(default_factory=dict)
+    destinations: dict[str, ChannelEntry] = Field(default_factory=dict)
+    credentials: dict[str, dict] = Field(default_factory=dict)
+    llm: dict[str, str] = Field(default_factory=dict)
 
     def enabled_sources(self) -> dict[str, ChannelEntry]:
         return {k: v for k, v in self.sources.items() if v.enabled}
@@ -48,7 +52,10 @@ def _interpolate(value):
 
 
 def load_channels(path: str | Path | None = None) -> ChannelsConfig:
-    """加载 channels.yaml（不存在/无 yaml 返回空 config，开发期不强制）。"""
+    """加载 channels.yaml（不存在/无 yaml 返回空 config，开发期不强制）。
+
+    Pydantic BaseModel 自动校验：字段类型不匹配时启动 fail-fast。
+    """
     try:
         import yaml
     except ImportError:
