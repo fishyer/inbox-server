@@ -1,4 +1,4 @@
-"""worker runner：三队列并发消费（asyncio.gather）。
+"""worker runner：三队列并发消费（asyncio.gather）+ graceful shutdown（SIGTERM/SIGINT）。
 
 独立进程入口：python -m inboxserver.workers.runner
 """
@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import signal
+from dataclasses import dataclass
 
 import httpx
 import redis.asyncio as aioredis
@@ -23,11 +25,22 @@ from inboxserver.infrastructure.queue.rate_guard import RateGuard
 from inboxserver.infrastructure.queue.repository import RedisQueueRepository
 from inboxserver.workers.consumer import consume
 
+
+@dataclass(frozen=True)
+class QueueLimits:
+    """队列限速配置（来自 inbox_queue：各服务配额模型不同）。"""
+
+    window_count: int
+    window_sec: int
+    daily_limit: int | None
+    interval: float
+
+
 # 限速常量（来自 inbox_queue：link 120/6h+480日、text 25/6h+96日、file 1400/30min）
-LIMITS = {
-    ItemKind.LINK: dict(window_count=120, window_sec=21600, daily_limit=480, interval=5),
-    ItemKind.TEXT: dict(window_count=25, window_sec=21600, daily_limit=96, interval=10),
-    ItemKind.FILE: dict(window_count=1400, window_sec=1800, daily_limit=None, interval=1),
+LIMITS: dict[ItemKind, QueueLimits] = {
+    ItemKind.LINK: QueueLimits(window_count=120, window_sec=21600, daily_limit=480, interval=5),
+    ItemKind.TEXT: QueueLimits(window_count=25, window_sec=21600, daily_limit=96, interval=10),
+    ItemKind.FILE: QueueLimits(window_count=1400, window_sec=1800, daily_limit=None, interval=1),
 }
 
 
@@ -48,7 +61,10 @@ def _make_process_link(http, cubox, llm_key):
 
 
 async def run_worker() -> None:
-    """启动三队列并发消费。link 走智能标签增强，text/file 直接 dispatch。"""
+    """启动三队列并发消费。link 走智能标签增强，text/file 直接 dispatch。
+
+    SIGTERM/SIGINT → stop_event.set() → consumer graceful shutdown（_interruptible_sleep 中断）。
+    """
     channels = load_channels()
     http: httpx.AsyncClient = make_http_client()
     queue_redis = aioredis.from_url(settings.redis_url)
@@ -60,14 +76,29 @@ async def run_worker() -> None:
         print("[worker] 无启用的 destination，退出")
         return
     llm_key = channels.llm.get("glm_api_key", "")
+
+    # graceful shutdown 信号
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop_event.set)
+
     tasks = []
     for kind in dests:
+        lim = LIMITS[kind]
         if kind is ItemKind.LINK:
             process_fn = _make_process_link(http, dests[kind], llm_key)
         else:
             process_fn = dests[kind].dispatch
         tasks.append(
-            consume(kind, queue_repo, dedup, rate, process_fn, kind.value, **LIMITS[kind])
+            consume(
+                kind, queue_repo, dedup, rate, process_fn, kind.value,
+                window_count=lim.window_count,
+                window_sec=lim.window_sec,
+                daily_limit=lim.daily_limit,
+                interval=lim.interval,
+                stop_event=stop_event,
+            )
         )
     await asyncio.gather(*tasks)
 

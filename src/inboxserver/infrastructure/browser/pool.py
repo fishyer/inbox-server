@@ -15,13 +15,24 @@ from inboxserver.infrastructure.browser.playwright_runtime import get_browser
 
 
 class BrowserPool:
+    """按 platform 复用 BrowserContext。MAX_CONTEXTS 防长期运行内存泄漏（LRU 淘汰最旧）。"""
+
+    MAX_CONTEXTS = 10
+
     def __init__(self):
         self._contexts: dict[str, BrowserContext] = {}
 
     async def context_for(
         self, platform: str, storage_state: dict | None = None
     ) -> BrowserContext:
-        """获取/缓存 platform 的 context（抓取用，复用同 storage_state）。"""
+        """获取/缓存 platform 的 context（抓取用，复用同 storage_state）。
+
+        达 MAX_CONTEXTS 时关闭最旧的（LRU，dict 保持插入序）。
+        """
+        if len(self._contexts) >= self.MAX_CONTEXTS and platform not in self._contexts:
+            oldest = next(iter(self._contexts))  # dict 保持插入序，首个=最旧
+            old_ctx = self._contexts.pop(oldest)
+            await old_ctx.close()
         if platform not in self._contexts:
             browser = await get_browser()
             self._contexts[platform] = await browser.new_context(**_ctx_kwargs(storage_state))
