@@ -54,6 +54,11 @@ class RedisQueueRepository:
         raws = await self._r.lrange(queue_key(kind), 0, -1)
         return [item for item in (_loads(r) for r in raws) if item is not None]
 
+    async def peek_dlq(self, kind: ItemKind) -> list[dict]:
+        """查看死信队列全部（不消费），供 /queue/dlq 运维排查（失败满 3 次的项）。"""
+        raws = await self._r.lrange(dlq_key(kind), 0, -1)
+        return [item for item in (_loads(r) for r in raws) if item is not None]
+
     async def dlq_len(self, kind: ItemKind) -> int:
         return await self._r.llen(dlq_key(kind))
 
