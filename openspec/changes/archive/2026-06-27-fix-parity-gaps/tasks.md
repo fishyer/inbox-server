@@ -50,4 +50,4 @@
 - [x] 7.1 全量 `pytest` 绿
 - [x] 7.2 `openspec validate fix-parity-gaps` 通过
 - [x] 7.3 CHANGELOG 汇总（按 `## 2026-06-28` 分组）
-- [ ] 7.4 每组独立 commit（commit message 用 conventional commits 中文正文）
+- [x] 7.4 每组独立 commit（commit message 用 conventional commits 中文正文）
