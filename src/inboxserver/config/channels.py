@@ -32,6 +32,7 @@ class ChannelsConfig(BaseModel):
     destinations: dict[str, ChannelEntry] = Field(default_factory=dict)
     credentials: dict[str, dict] = Field(default_factory=dict)
     llm: dict[str, str] = Field(default_factory=dict)
+    notification: dict[str, str] = Field(default_factory=dict)
 
     def enabled_sources(self) -> dict[str, ChannelEntry]:
         return {k: v for k, v in self.sources.items() if v.enabled}
@@ -69,4 +70,5 @@ def load_channels(path: str | Path | None = None) -> ChannelsConfig:
         destinations={k: ChannelEntry(**v) for k, v in (raw.get("destinations") or {}).items()},
         credentials=raw.get("credentials") or {},
         llm=raw.get("llm") or {},
+        notification=raw.get("notification") or {},
     )
