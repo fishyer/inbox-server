@@ -2,6 +2,18 @@
 
 ## 2026-06-28
 
+### fix(youtube)：_VIDEO_SELECT 标题误抓时长（改 #video-title / h3 a）
+
+**bug**：cubox 书签标题显示 `0:57`（时长）。根因：`_VIDEO_SELECT` 抓所有 `a[href*="watch?v="]`，首个是**缩略图** a，其 `title` 属性 = 时长（非视频标题）。
+
+**修复**：改抓 `#video-title`（WL 标题 a）+ `h3 a[href*="watch?v="]`（LL 标题 a），`textContent` = 视频标题。
+
+**如何验证**：persistent WL `#video-title` → title=`科学减掉「腹部脂肪」...`（视频标题，非时长）；3 单测 passed；全量无回归
+
+> 注：cubox 已收到的「时长标题」书签需手动改 title（baseline video_id 已存，不会 re-cubox）
+
+---
+
 ### docs：CLAUDE.md 补 YouTube 经验（WL/LL DOM 差异）+ consumer 限额诊断/临时忽略
 
 YouTube 完整流程验证后经验沉淀（CLAUDE.md 注意事项 13-14）：
