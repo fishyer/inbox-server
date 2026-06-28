@@ -22,15 +22,14 @@ from inboxserver.plugins.login_strategies.youtube import YT_BASE
 _VIDEO_SELECT = r"""() => {
     const seen = new Set();
     const out = [];
-    // 兼容「稍后观看」(WL, ytd-*-renderer) + 「点赞」(LL, #contents 内 DIV 容器)：
-    // LL 的 video 不在 ytd-renderer 而在 #contents DIV，故直接抓 #contents 内所有 video link
+    // 抓标题链接：WL（#video-title，a）+ LL 点赞（h3 a），textContent = 视频标题。
+    // 不要抓所有 a[href*="watch?v="]——首个是缩略图，其 title 属性是时长（"0:57"）非标题
     const root = document.querySelector('#contents') || document;
-    root.querySelectorAll('a[href*="watch?v="]').forEach(a => {
+    root.querySelectorAll('#video-title, h3 a[href*="watch?v="]').forEach(a => {
         const m = a.href.match(/watch\?v=([\w-]{6,})/);
         if (!m || seen.has(m[1])) return;
         seen.add(m[1]);
-        const title = (a.getAttribute('title') || a.getAttribute('aria-label')
-                       || a.textContent || '').trim().replace(/\s+/g, ' ');
+        const title = (a.textContent || '').trim().replace(/\s+/g, ' ');
         out.push({id: m[1], title: title.slice(0, 100) || m[1]});
     });
     return out;
