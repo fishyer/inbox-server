@@ -2,6 +2,13 @@
 
 ## 2026-06-28
 
+### docs：更新 CLAUDE.md 工作流 + roadmap 状态
+
+- **CLAUDE.md Git 工作流**：明确 `main`=开发分支（CI/CD 持续集成/构建）、`release`=稳定分支（手动管理）；PR 提交后**自动 code review + merge**（无需人工放行，`gh pr merge --squash --delete-branch`）
+- **roadmap**：P1-6 / P2-7/8/9/10 标 `[x]`（PR #4/#5/#7 已完成）；A2 邮箱改网易 163（用户已配）+ TG chat_id 标完成
+
+---
+
 ### refactor(workers)：consume 收 QueueLimits + 测试 stop_event + structlog 上下文绑定
 
 P2-7/P2-8/P2-9 三项 workers 层打磨（来自 `docs/optimization-plan.md`）：
