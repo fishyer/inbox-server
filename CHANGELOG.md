@@ -2,6 +2,17 @@
 
 ## 2026-06-28
 
+### feat(bilibili)：collect 翻页增量（pn 循环 + 整页 known 停）
+
+`BilibiliSource.collect` 之前只抓第一页（`pn=1, ps=20`，20 条），新增 >20 或在第 2 页后漏抓。改为翻页（pn=1..MAX_PAGES，复刻 zhihu 范式）：
+- 每页 parse + 增量去重（baseline known），**整页全 known 则停**（新收藏在前，旧页全是已知）
+- 空页（抓完）停；`MAX_PAGES=500` 防无限（默认收藏夹 2508 条 ≈ 126 页）
+- 加单测：翻页到空页停 + 翻页到整页 known 停（增量验证）
+
+**如何验证**：`uv run pytest tests/unit/plugins/test_bilibili_source.py` → 4 passed（含 paginate）；全量 147 passed 无回归
+
+---
+
 ### fix(bilibili)：B站收集链路修复（example 模板 + worker Xvfb lock 根因）
 
 验证 B站收藏流程时发现并修复 2 个问题：

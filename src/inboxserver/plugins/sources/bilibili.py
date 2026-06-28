@@ -20,6 +20,8 @@ from inboxserver.plugins.contracts import CollectResult, SourceKind
 
 BILI_API = "https://api.bilibili.com"
 
+MAX_PAGES = 500  # 分页上限（防无限；默认收藏夹 2508 条 ≈ 126 页）
+
 
 def parse_bilibili_favorites(body_text: str) -> list[Bookmark]:
     """解析 B站收藏 API 响应 → [Bookmark]。{data:{medias:[{bvid,title}]}} → bvid 转 url。"""
@@ -61,31 +63,42 @@ class BilibiliSource:
         self._baseline = baseline_repo
 
     async def collect(self) -> CollectResult:
-        api = f"{BILI_API}/x/v3/fav/resource/list?media_id={self._media_id}&pn=1&ps=20"
+        """分页抓取收藏夹（pn 循环，对齐老 dispatcher export_favorites.mjs）。
+
+        增量优化：翻到整页全 known（无新）即停——新收藏总在前，旧页全是已知。
+        MAX_PAGES 防无限分页；空页（抓完/空收藏夹）也停。
+        """
         try:
-            result = await self._fetch_with_relogin(api)
-        except Exception as e:
-            return CollectResult(meta={"platform": "bilibili", "error": repr(e)})
+            known = await self._baseline.get_known("bilibili")
+            all_new: list[Bookmark] = []
+            for pn in range(1, MAX_PAGES + 1):
+                api = f"{BILI_API}/x/v3/fav/resource/list?media_id={self._media_id}&pn={pn}&ps=20"
+                result = await self._fetch_with_relogin(api)
+                bookmarks = parse_bilibili_favorites(result.get("body", ""))
+                if not bookmarks:
+                    break  # 空页（已抓完或空收藏夹）
+                new = [b for b in bookmarks if b.url not in known]
+                all_new.extend(new)
+                if not new:
+                    break  # 整页全 known，更旧都是已知，停止翻页
 
-        bookmarks = parse_bilibili_favorites(result.get("body", ""))
-        known = await self._baseline.get_known("bilibili")
-        new = [b for b in bookmarks if b.url not in known]
-        if not new:
-            return CollectResult(skipped=len(bookmarks), meta={"platform": "bilibili"})
+            if not all_new:
+                return CollectResult(skipped=len(known), meta={"platform": "bilibili"})
 
-        link_count = 0
-        for b in new:
-            tags = await generate_smart_tags(self._http, b.title, self._llm_key)
-            await self._queue.enqueue(
-                ItemKind.LINK, {"url": b.url, "title": b.title, "tags": fmt_cubox_tags(tags)}
+            link_count = 0
+            for b in all_new:
+                tags = await generate_smart_tags(self._http, b.title, self._llm_key)
+                await self._queue.enqueue(
+                    ItemKind.LINK, {"url": b.url, "title": b.title, "tags": fmt_cubox_tags(tags)}
+                )
+                link_count += 1
+            await self._baseline.save_known("bilibili", known | {b.url for b in all_new})
+            return CollectResult(
+                enqueued={"link": link_count},
+                meta={"platform": "bilibili", "new": len(all_new)},
             )
-            link_count += 1
-        await self._baseline.save_known("bilibili", known | {b.url for b in new})
-        return CollectResult(
-            enqueued={"link": link_count},
-            skipped=len(bookmarks) - len(new),
-            meta={"platform": "bilibili", "new": len(new)},
-        )
+        except Exception as e:  # 抓取失败：记录错误，不阻塞其他源
+            return CollectResult(meta={"platform": "bilibili", "error": repr(e)})
 
     async def _fetch_with_relogin(self, url: str) -> dict:
         """抓取，遇 401(LoginExpired) → mark_expired + 重试一次。"""

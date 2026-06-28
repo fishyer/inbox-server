@@ -56,17 +56,51 @@ async def test_collect_via_scraper_and_dedup(source):
         baseline_repo=AsyncMock(),
     )
     real._session.acquire.return_value = {"cookies": []}
-    real._scraper.fetch_via_page.return_value = {
-        "status": 200,
-        "body": json.dumps({"data": {"medias": [{"bvid": "BV1", "title": "X"}]}}),
-    }
+    # 翻页：第 1 页 1 条新，第 2 页空 → 停止翻页
+    real._scraper.fetch_via_page.side_effect = [
+        {"status": 200, "body": json.dumps({"data": {"medias": [{"bvid": "BV1", "title": "X"}]}})},
+        {"status": 200, "body": json.dumps({"data": {"medias": []}})},  # 空页 → 停止翻页
+    ]
     real._baseline.get_known.return_value = set()
     real._http.post.return_value.json.return_value = {"choices": [{"message": {"content": "t1,t2"}}]}
 
     result = await real.collect()
 
     assert result.enqueued == {"link": 1}
-    real._scraper.fetch_via_page.assert_called_once()
+    assert real._scraper.fetch_via_page.await_count == 2  # 翻 2 页（第 2 空页停）
     real._queue.enqueue.assert_called_once()
     payload = real._queue.enqueue.await_args.args[1]
     assert payload["url"] == "https://www.bilibili.com/video/BV1"
+
+
+async def test_collect_paginate_breaks_on_all_known():
+    """增量：翻到整页全 known（baseline 已有）即停——新收藏在前，旧页全是已知。"""
+    from inboxserver.plugins.sources.bilibili import BilibiliSource
+
+    real = BilibiliSource(
+        {"credential_name": "bili_creds", "media_id": "123"},
+        session_manager=AsyncMock(),
+        scraper=AsyncMock(),
+        queue_repo=AsyncMock(),
+        http=AsyncMock(),
+        llm_api_key="k",
+        baseline_repo=AsyncMock(),
+    )
+    real._session.acquire.return_value = {"cookies": []}
+    # baseline 已有旧收藏 BV_old → 第 2 页整页全 known 触发 break
+    real._baseline.get_known.return_value = {"https://www.bilibili.com/video/BV_old"}
+    real._scraper.fetch_via_page.side_effect = [
+        {"status": 200, "body": json.dumps({"data": {"medias": [
+            {"bvid": "BV_new", "title": "新视频"},
+            {"bvid": "BV_old", "title": "旧视频"},
+        ]}})},
+        {"status": 200, "body": json.dumps({"data": {"medias": [
+            {"bvid": "BV_old", "title": "旧视频"},  # 整页全 known → 停止翻页
+        ]}})},
+    ]
+    real._http.post.return_value.json.return_value = {"choices": [{"message": {"content": "t"}}]}
+
+    result = await real.collect()
+
+    assert result.enqueued == {"link": 1}  # 只 BV_new（增量，旧的不入队）
+    assert real._scraper.fetch_via_page.await_count == 2  # 翻 2 页停（第 3 不调）
