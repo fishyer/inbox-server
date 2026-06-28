@@ -22,10 +22,10 @@
 - [ ] inoreader：同上，待启用
 - [ ] 油管（YouTube）：同上，待启用
 
-### A2. 配置（待用户提供）
+### A2. 配置（✅ 已完成）
 
-- [ ] ⚙️ QQ SMTP 授权码 `INBOX_SMTP_PASS`（缺失时邮件通知走 `LogNotifier` 兜底）
-- [ ] ⚙️ Telegram 通知 chat_id `TELEGRAM_CHAT_ID`（缺失时跳过 Telegram 通道）
+- [x] ⚙️ 网易 163 SMTP 授权码 `INBOX_SMTP_PASS`（用户已配，缺失时走 `LogNotifier` 兜底）
+- [x] ⚙️ Telegram 通知 chat_id `TELEGRAM_CHAT_ID`（用户已配，已收到同步报告）
 
 ---
 
@@ -46,36 +46,28 @@
   - 证据：`domain/policy/netscape.py:18,29`（`yield Bookmark`，已是迭代器）
 - [x] **P1-5 `@asynccontextmanager` 封装 browser lifecycle**
   - 证据：`infrastructure/browser/playwright_runtime.py:38,40`（`@asynccontextmanager def browser_session()`）
-- [ ] **P1-6 channels config Pydantic 化（部分完成）**
-  - 已做：`config/channels.py:18` `ChannelEntry(BaseModel)`
-  - 待做：`config: dict[str, str]`（`channels.py:22`）仍是裸 dict，未按 source 类型建具体模型（如 `TelegramConfig` / `ZhihuConfig`），`required_config` 启动时未 fail-fast 校验
+- [x] **P1-6 channels config Pydantic 强类型校验（启动 fail-fast）**
+  - 证据：`config/channels.py` 新增 9 个 config 模型（6 source + 3 destination）+ name 路由 + `_validate_channel` + `load_channels` fail-fast（PR #5）
 
-### P2 — Suggestion（❌ 全部待办）
+### P2 — Suggestion（✅ 全部已完成）
 
-- [ ] **P2-7** consumer `consume` 10+ 参数 → 用 `QueueLimits` dataclass 封装（keyword-only）
-- [ ] **P2-8** 测试 `asyncio.wait_for` 暴力取消 → 配合 P0-1 的 `stop_event` 精确停止（测试中 `wait_for` 仍有 2 处）
-- [ ] **P2-9** structlog `contextvars.bind_contextvars`（绑定 source/queue 上下文，日志可追溯）
-- [ ] **P2-10 mypy 硬门槛建**
-  - 现状：`.github/workflows/ci.yml:28` `uv run mypy ... || true`（advisory，不阻断）
-  - 目标：去掉 `|| true`，类型错误阻断合并
+- [x] **P2-7** consumer 参数收敛为 `QueueLimits`（PR #4，`domain/models.py`）
+- [x] **P2-8** 测试 `stop_event` 替代 `wait_for` 暴力取消（PR #4，`_run_until_stopped` helper）
+- [x] **P2-9** structlog `bound_contextvars` 绑定上下文（PR #4，browser_collector per-source + runner component）
+- [x] **P2-10 mypy 硬门槛建**（PR #7：`pyproject [tool.mypy]` 修通配置 + 修 16 类型错误 + CI 去 `|| true`）
 
 ---
 
-## C. 推进节奏（剩余项，建议 2 个 PR）
+## C. 推进节奏（✅ 全部完成）
 
-> optimization-plan 原估 ~10h / 4 个 PR 已不适用——P0、P1 多数完成。剩余仅 P1-6 + P2 系列，约 ~4h。
+P1-6 + P2-7/8/9/10 已分别通过 **PR #4**（workers: P2-7/8/9）+ **PR #5**（config: P1-6）+ **PR #7**（mypy: P2-10）合并到 main。每项 TDD + 自验全绿。
 
-| 批次 | 项 | 预估 | 价值 | 建议分支 |
-|------|-----|------|------|----------|
-| 第一阶段 | P1-6（config 细化）+ P2-9（structlog contextvars） | ~1.5h | 可维护性 / 可观测性 | `refactor/pydantic-config-and-structlog-bind` |
-| 第二阶段 | P2-7（QueueLimits）+ P2-8（测试 stop_event）+ P2-10（mypy 硬门槛建） | ~2.5h | 工程质量 | `chore/queue-limits-test-mypy-gate` |
-
-每项 TDD：先写测试再改，改完 `uv run pytest tests/unit tests/integration` 全绿。
+剩余：仅 A1 的 browser 源逐个启用（B站/inoreader/油管，待凭据）。
 
 ---
 
 ## D. 杂项
 
-- [ ] `README.md` 当前为空，补项目说明 / 快速启动 / 架构图
+- [x] `README.md` 补全（PR #6：架构/启动/配置/API/凭据获取）
 - [ ] ⚙️ 启用 browser 源前需配齐凭据（`POST /login/{platform}/cookie`）
-- [ ] `docs/optimization-plan.md` 状态已滞后，建议顶部加过时声明或归档（避免误导后续引用）
+- [x] `docs/optimization-plan.md` 顶部已加过时声明（PR #3）

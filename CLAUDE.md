@@ -17,8 +17,9 @@
 
 ## 🔴 Git 工作流硬规则（最高优先级）
 
-> **禁止直接在 `main` 分支改任何代码。所有改动走 feature 分支 + PR。**
-> 项目已有先例：PR #1（`fix/parity-gaps`）、`feat/browser-collect-worker`。
+> **分支定位**：`main` = **开发分支**（CI/CD 持续集成/构建，PR 合入即触发）；`release` = **稳定分支**（手动管理，不自动动）。
+> **核心规则**：禁止直接在 `main` 改代码 → 所有改动走 feature 分支 + PR → **自动 code review（自验四件套）+ merge 到 main**。
+> 历史先例：PR #1–#7 全部走此流程。
 
 ### 1. 分支命名
 
@@ -35,10 +36,13 @@ git fetch origin
 git checkout -b feat/xxx origin/main
 
 # ③ 小步 commit（conventional commits + 中文正文，见下）
-# ④ 推送并开 PR
+# ④ 推送并开 PR（target=main）
 git push -u origin feat/xxx
 gh pr create --base main --title "feat(xxx): 简述" --body "..."
-# ⑤ merge 后删分支
+# ⑤ 自动 code review（自验四件套全绿）+ merge 到 main
+#    CHANGELOG 同位置冲突 → rebase 解（保留所有条目）；语义冲突手动合并
+# ⑥ merge 后删分支
+gh pr merge --squash --delete-branch
 ```
 
 ### 3. Commit 规范
@@ -49,9 +53,10 @@ gh pr create --base main --title "feat(xxx): 简述" --body "..."
 
 ### 4. PR 规范
 
-- **target 永远是 `main`**
+- **target 永远是 `main`**（开发分支；`release` 稳定分支手动管，不在此流程）
 - PR 前跑「自验四件套」全绿
 - PR 描述含：改了什么 / 如何验证 / 关联 change（openspec）
+- **PR 提交后自动 review + merge**：main 是开发分支（CI 把关），无需人工放行；`gh pr merge --squash --delete-branch`
 
 ---
 
