@@ -31,3 +31,17 @@ def test_sync_requires_no_key_when_unset():
     # sync 会触发 get_session（连 DB），此处仅验证路由注册可达：用错误的依赖会报 500 而非 404
     r = client.post("/sync")
     assert r.status_code != 404  # 路由存在（可能 500 因无 DB，但非 404）
+
+
+def test_new_routes_registered():
+    """5 个新端点已注册：/queue、/queue/dlq、/channels、/login/{platform}/*。"""
+    client = TestClient(create_app())
+    paths = client.get("/openapi.json").json()["paths"]
+    for ep in [
+        "/queue",
+        "/queue/dlq",
+        "/channels",
+        "/login/{platform}/cookie",
+        "/login/{platform}/status",
+    ]:
+        assert ep in paths, f"missing route: {ep}"

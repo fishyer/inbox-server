@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from inboxserver.api.routes import health, sync
+from inboxserver.api.routes import channels, health, login, queue, sync
 from inboxserver.config.logging import configure_logging
 from inboxserver.config.settings import settings
 
@@ -36,4 +36,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="inbox-server", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(sync.router)
+    app.include_router(queue.router)
+    app.include_router(channels.router)
+    app.include_router(login.router)
     return app

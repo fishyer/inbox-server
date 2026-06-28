@@ -28,10 +28,15 @@ class Settings(BaseSettings):
     # 调度
     scheduler_enabled: bool = True  # APScheduler 定时 collect（测试环境关闭）
 
-    # 邮件通知（agently-cli，复刻 inbox_dispatcher 汇总邮件）
-    email_enabled: bool = False  # 容器需装 node + agently-cli 后开启；否则用 LogNotifier 兜底
-    agently_cli_path: str = "/opt/homebrew/bin/agently-cli"
-    email_to: str = "630709658@qq.com"
+    # 邮件通知（smtplib 直连 QQ SMTP；去 agently-cli/node 依赖，容器化友好）
+    # email_enabled=True 且 smtp 凭据齐全才真发；否则 LogNotifier 兜底（通知是附加通道，不阻塞主流程）
+    email_enabled: bool = False
+    smtp_host: str = "smtp.163.com"  # SMTP 主机（默认网易 163；可由 .env 覆盖）
+    smtp_port: int = 465  # QQ SMTP over SSL 端口
+    smtp_user: str = ""  # 发件 QQ 邮箱地址（如 630709658@qq.com）
+    smtp_pass: str = ""  # QQ SMTP 授权码（QQ 邮箱设置开启 SMTP 后生成，非登录密码）
+    email_from: str = ""  # 发件人；为空时回退 smtp_user
+    email_to: str = "630709658@qq.com"  # 收件人
 
 
 settings = Settings()
