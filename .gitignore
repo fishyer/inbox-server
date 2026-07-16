@@ -18,6 +18,7 @@ tmp/
 .pytest_cache/
 .ruff_cache/
 .playwright-cli/
+node_modules/
 
 # DB
 *.db

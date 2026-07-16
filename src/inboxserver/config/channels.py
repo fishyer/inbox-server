@@ -25,6 +25,24 @@ class ChannelEntry(BaseModel):
     credential_ref: str | None = None
 
 
+class ArticleArchiveConfig(BaseModel):
+    """文章 Markdown 归档配置；默认关闭以保持旧部署行为。"""
+
+    enabled: bool = False
+    remote_dir: str = "/我的坚果云/文章归档"
+    min_visible_characters: int = Field(default=200, gt=0)
+    http_timeout_seconds: float = Field(default=30, gt=0)
+    browser_timeout_seconds: float = Field(default=45, gt=0)
+    defuddle_timeout_seconds: float = Field(default=30, gt=0)
+    max_html_bytes: int = Field(default=8_000_000, gt=0)
+    max_output_bytes: int = Field(default=10_000_000, gt=0)
+    enqueue_attempts: int = Field(default=3, ge=1, le=10)
+    rate_window_count: int = Field(default=60, gt=0)
+    rate_window_seconds: int = Field(default=3600, gt=0)
+    daily_limit: int | None = Field(default=200, gt=0)
+    interval_seconds: float = Field(default=5, ge=0)
+
+
 class ChannelsConfig(BaseModel):
     """全量渠道配置。"""
 
@@ -33,6 +51,7 @@ class ChannelsConfig(BaseModel):
     credentials: dict[str, dict] = Field(default_factory=dict)
     llm: dict[str, str] = Field(default_factory=dict)
     notification: dict[str, str] = Field(default_factory=dict)
+    article_archive: ArticleArchiveConfig = Field(default_factory=ArticleArchiveConfig)
 
     def enabled_sources(self) -> dict[str, ChannelEntry]:
         return {k: v for k, v in self.sources.items() if v.enabled}
@@ -172,6 +191,7 @@ def load_channels(path: str | Path | None = None) -> ChannelsConfig:
         credentials=raw.get("credentials") or {},
         llm=raw.get("llm") or {},
         notification=raw.get("notification") or {},
+        article_archive=ArticleArchiveConfig(**(raw.get("article_archive") or {})),
     )
     # P1-6：启动 fail-fast 校验启用渠道的 config（缺字段/类型错清晰报错）
     for name, entry in cfg.enabled_sources().items():

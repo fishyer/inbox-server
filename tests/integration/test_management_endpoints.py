@@ -37,7 +37,7 @@ def _open_auth(monkeypatch):
 
 
 async def test_queue_returns_counts(fake_redis, db_session):
-    """GET /queue 返回三类队列的 pending/dlq/done 计数。"""
+    """GET /queue 返回 link/text/file/article 队列的 pending/dlq/done 计数。"""
     repo = RedisQueueRepository(fake_redis)
     await repo.enqueue(ItemKind.LINK, {"url": "https://a"})
     await repo.enqueue(ItemKind.LINK, {"url": "https://b"})
@@ -51,13 +51,18 @@ async def test_queue_returns_counts(fake_redis, db_session):
     assert r.status_code == 200
     assert q["link"]["pending"] == 2
     assert q["text"]["dlq"] == 1
-    assert set(q.keys()) == {"link", "text", "file"}
+    assert set(q.keys()) == {"link", "text", "file", "article"}
+    assert q["article"] == {"pending": 0, "dlq": 0, "done": 0}
 
 
 async def test_queue_dlq_returns_items(fake_redis, db_session):
     """GET /queue/dlq 返回死信内容（不消费）。"""
     repo = RedisQueueRepository(fake_redis)
     await repo.move_to_dlq(ItemKind.LINK, {"url": "https://x", "title": "t"})
+    await repo.move_to_dlq(
+        ItemKind.ARTICLE,
+        {"url": "https://article.example/x", "title": "article", "retry": 3},
+    )
     app = create_app()
     app.dependency_overrides[get_redis] = _dep(fake_redis)
     app.dependency_overrides[get_session] = _dep(db_session)
@@ -67,6 +72,8 @@ async def test_queue_dlq_returns_items(fake_redis, db_session):
     assert r.status_code == 200
     assert body["counts"]["link"] == 1
     assert body["dlq"]["link"][0]["url"] == "https://x"
+    assert body["counts"]["article"] == 1
+    assert body["dlq"]["article"][0]["retry"] == 3
 
 
 async def test_channels_redacts_secrets(monkeypatch, tmp_path, fake_redis, db_session):

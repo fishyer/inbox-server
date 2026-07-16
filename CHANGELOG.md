@@ -2,6 +2,20 @@
 
 ## 2026-07-16
 
+### feat(article)：Cubox 成功后独立归档文章 Markdown 到坚果云
+
+- 新增独立 `article` 队列、限速、去重、重试和 DLQ；仅在 Cubox 返回成功后入队，归档失败不重试 Cubox
+- worker 镜像固定 Node.js 22.17.0、`defuddle@0.19.1` 和 Eta 4.6.0，直接抓取不足时复用 headed Playwright 获取完整 HTML
+- 按 Asia/Shanghai 归档日期生成无空格、无特殊字符的 `YYYYMMDD-文章标题.md`，写入稳定 Obsidian Properties 并保留远程图片链接
+- 复用坚果云 WebDAV 凭据上传到 `/我的坚果云/文章归档`，兼容坚果云父目录 PROPFIND 与文件流 PUT 限制，目标存在时跳过覆盖
+
+**如何验证**：
+- `uv run ruff check src/inboxserver tests scripts` → passed
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 215 passed（8 个既有 warning）
+- `uv run mypy src/inboxserver --ignore-missing-imports` → passed
+- `docker compose build worker` → Node.js/Defuddle/Eta 运行时检查通过
+- 真实微信链接 `https://mp.weixin.qq.com/s/NsyC48FMKnuyrGRD5V3SbA` → Cubox 成功后归档 `20260716-普通人弯道超车的整体性学习方法.md`，WebDAV 回读 7720 字节、正文 2031 个可见字符、Properties 与来源 URL 完整
+
 ### docs(agent)：Git 交付统一委托 git-manager
 
 - 移除项目级“禁止直接修改 main、所有任务强制 feature 分支 + PR、固定 merge 策略”等覆盖规则

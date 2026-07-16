@@ -1,6 +1,6 @@
 """队列状态端点：GET /queue（各内容类型计数）/queue/dlq（死信内容）。
 
-遍历 ItemKind（link/text/file）三类队列，复用 RedisQueueRepository +
+遍历 ItemKind（link/text/file/article）四类队列，复用 RedisQueueRepository +
 DedupStore，是 IO 层的只读包装（无业务逻辑）。挂 require_api_key（队列属运维敏感）。
 """
 
@@ -29,7 +29,7 @@ async def list_queue(
     repo = RedisQueueRepository(queue_redis)
     dedup = DedupStore(queue_redis)
     queues: dict[str, dict[str, int]] = {}
-    for kind in ItemKind:  # LINK / TEXT / FILE
+    for kind in ItemKind:
         queues[kind.value] = {
             "pending": await repo.len(kind),
             "dlq": await repo.dlq_len(kind),

@@ -1,0 +1,10 @@
+---
+title: <%~ it.title_yaml %>
+source_url: <%~ it.source_url_yaml %>
+archived_at: <%~ it.archived_at_yaml %>
+author: <%~ it.author_yaml %>
+published_at: <%~ it.published_at_yaml %>
+tags: <%~ it.tags_yaml %>
+---
+
+<%~ it.markdown %>

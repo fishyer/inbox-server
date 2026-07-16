@@ -10,12 +10,28 @@ Item 66（@asynccontextmanager）：browser_session() 统一 lifecycle，确保�
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
-from playwright.async_api import Browser, Playwright, async_playwright
+from playwright.async_api import (
+    Browser,
+    Playwright,
+    async_playwright,
+)
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
+
+from inboxserver.infrastructure.article_archive.fetcher import USER_AGENT
 
 _pw: Playwright | None = None
 _browser: Browser | None = None
+
+
+class RenderedHtmlError(RuntimeError):
+    """渲染后 HTML 获取失败；仅暴露稳定错误码。"""
 
 
 async def get_browser() -> Browser:
@@ -33,6 +49,42 @@ async def get_browser() -> Browser:
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
     return _browser
+
+
+async def fetch_rendered_html(
+    url: str,
+    *,
+    timeout_seconds: float,
+    max_html_bytes: int,
+    browser: Browser | None = None,
+) -> str:
+    """用现有 headed browser 获取渲染后 HTML，并释放独立 context。"""
+    runtime = browser or await get_browser()
+    context = await runtime.new_context(user_agent=USER_AGENT)
+    try:
+        page = await context.new_page()
+        try:
+            await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=int(timeout_seconds * 1000),
+            )
+        except PlaywrightError as error:
+            raise RenderedHtmlError("navigation_failed") from error
+        with suppress(PlaywrightTimeoutError):
+            await page.wait_for_selector("#js_content", state="attached", timeout=15_000)
+        with suppress(PlaywrightTimeoutError):
+            await page.wait_for_load_state("networkidle", timeout=10_000)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await page.wait_for_timeout(1000)
+        html = await page.content()
+        if len(html.encode()) > max_html_bytes:
+            raise RenderedHtmlError("html_too_large")
+        if len(html.strip()) < 100:
+            raise RenderedHtmlError("empty_html")
+        return html
+    finally:
+        await context.close()
 
 
 @asynccontextmanager

@@ -12,6 +12,7 @@ class ItemKind(StrEnum):
     LINK = "link"  # 链接 → Cubox
     TEXT = "text"  # 纯文本 → flomo
     FILE = "file"  # 文件 → 坚果云
+    ARTICLE = "article"  # 文章正文 → 坚果云 Markdown 归档
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,8 @@ class QueueItem:
     """队列项：内容类型 + 载荷。
 
     载荷结构随 kind 而异：
-      link={url,title,tags} / text={content} / file={local_path,remote_name}
+      link={url,title,tags} / text={content} / file={local_path,remote_name} /
+      article={url,title,tags,requested_at}
     """
 
     kind: ItemKind

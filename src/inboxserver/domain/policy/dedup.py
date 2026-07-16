@@ -1,7 +1,7 @@
 """成功去重指纹（纯函数；IO 在 infrastructure/queue/dedup_store）。
 
 算法（来自 worker._dedup_key + inbox_queue.is_done/mark_done）：
-  指纹：link=url 原值 / text=md5(content) / file=remote_name
+  指纹：link=url 原值 / text=md5(content) / file=remote_name / article=sha256(url)
   done key = f"{queue_key}:done:{指纹}"，SET ex=604800(7天)
 """
 
@@ -16,13 +16,15 @@ DONE_TTL = 604800
 
 
 def fingerprint(item: dict, kind: ItemKind) -> str:
-    """计算去重指纹：link=url / text=md5(content) / file=remote_name。"""
+    """计算去重指纹：article 使用 URL 哈希，避免 Redis key 暴露完整链接。"""
     if kind == ItemKind.LINK:
         return item.get("url", "")
     if kind == ItemKind.TEXT:
         return hashlib.md5(item.get("content", "").encode()).hexdigest()
     if kind == ItemKind.FILE:
         return item.get("remote_name", "")
+    if kind == ItemKind.ARTICLE:
+        return hashlib.sha256(item.get("url", "").encode()).hexdigest()
     return ""
 
 

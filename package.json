@@ -1,0 +1,13 @@
+{
+  "name": "inbox-server-article-runtime",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "defuddle": "0.19.1",
+    "eta": "4.6.0"
+  }
+}

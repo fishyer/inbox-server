@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from collections.abc import Callable
 from contextlib import suppress
+from datetime import UTC, datetime
 
 import httpx
 import redis.asyncio as aioredis
@@ -17,13 +19,20 @@ from inboxserver.config.channels import load_channels
 from inboxserver.config.logging import configure_logging
 from inboxserver.config.settings import settings
 from inboxserver.domain.models import ItemKind, QueueLimits
+from inboxserver.domain.policy.article_archive import url_fingerprint
 from inboxserver.domain.policy.tags import fmt_cubox_tags, fmt_flomo_tags
+from inboxserver.infrastructure.article_archive.defuddle import DefuddleBridge
+from inboxserver.infrastructure.article_archive.fetcher import DirectHtmlFetcher
+from inboxserver.infrastructure.article_archive.service import ArticleArchiveService
+from inboxserver.infrastructure.browser.playwright_runtime import fetch_rendered_html
 from inboxserver.infrastructure.destinations.dispatcher import build_destinations
+from inboxserver.infrastructure.destinations.webdav import JianguoyunWebDav
 from inboxserver.infrastructure.http_client import make_http_client
 from inboxserver.infrastructure.llm import generate_smart_tags
 from inboxserver.infrastructure.queue.dedup_store import DedupStore
 from inboxserver.infrastructure.queue.rate_guard import RateGuard
 from inboxserver.infrastructure.queue.repository import RedisQueueRepository
+from inboxserver.plugins.contracts import DispatchOutcome
 from inboxserver.workers.consumer import consume
 
 log = structlog.get_logger(__name__)
@@ -37,7 +46,42 @@ LIMITS: dict[ItemKind, QueueLimits] = {
 }
 
 
-def _make_process_link(http, cubox, llm_key):
+async def _enqueue_article_archive(
+    queue_repo: RedisQueueRepository,
+    payload: dict,
+    *,
+    attempts: int,
+    delay_seconds: float,
+) -> bool:
+    """Cubox 成功后的有界入队；失败仅告警，不反转 Cubox 结果。"""
+    for attempt in range(1, attempts + 1):
+        try:
+            await queue_repo.enqueue(ItemKind.ARTICLE, payload)
+            return True
+        except Exception as error:
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds * attempt)
+                continue
+            log.error(
+                "article_archive_enqueue_failed",
+                url_fingerprint=url_fingerprint(str(payload.get("url") or "")),
+                attempts=attempts,
+                error_type=type(error).__name__,
+            )
+    return False
+
+
+def _make_process_link(
+    http,
+    cubox,
+    llm_key,
+    *,
+    queue_repo: RedisQueueRepository | None = None,
+    archive_enabled: bool = False,
+    archive_enqueue_attempts: int = 3,
+    archive_enqueue_delay: float = 0.25,
+    archive_clock: Callable[[], datetime] | None = None,
+):
     """link 消费处理：无标签时现场调 GLM 生成智能标签 + github 来源标签，再 dispatch。
 
     标签在消费时（限速后）生成，避免入队洪峰瞬间打爆 GLM（对齐 inbox_dispatcher.worker）。
@@ -48,9 +92,71 @@ def _make_process_link(http, cubox, llm_key):
         if not item.get("tags"):
             tags = await generate_smart_tags(http, item.get("title") or url, llm_key)
             item["tags"] = fmt_cubox_tags(tags, is_github="github.com" in url)
-        return await cubox.dispatch(item)
+        result = await cubox.dispatch(item)
+        if (
+            result[1] is DispatchOutcome.OK
+            and archive_enabled
+            and queue_repo is not None
+            and url
+        ):
+            clock = archive_clock or (lambda: datetime.now(UTC))
+            await _enqueue_article_archive(
+                queue_repo,
+                {
+                    "url": url,
+                    "title": str(item.get("title") or ""),
+                    "tags": list(item.get("tags") or []),
+                    "requested_at": clock().isoformat(),
+                },
+                attempts=archive_enqueue_attempts,
+                delay_seconds=archive_enqueue_delay,
+            )
+        return result
 
     return process
+
+
+def _article_limits(config) -> QueueLimits:
+    """从文章归档配置生成独立限速策略。"""
+    return QueueLimits(
+        window_count=config.rate_window_count,
+        window_sec=config.rate_window_seconds,
+        daily_limit=config.daily_limit,
+        interval=config.interval_seconds,
+    )
+
+
+def _build_article_archive_service(channels, http) -> ArticleArchiveService:
+    """使用仓库内 Defuddle、headed Playwright 和现有坚果云凭据构建归档服务。"""
+    config = channels.article_archive
+    jianguoyun = channels.destinations.get("jianguoyun")
+    if jianguoyun is None or not jianguoyun.enabled:
+        raise ValueError("article_archive_requires_enabled_jianguoyun")
+    bridge = DefuddleBridge(
+        timeout_seconds=config.defuddle_timeout_seconds,
+        max_input_bytes=config.max_html_bytes,
+        max_output_bytes=config.max_output_bytes,
+    )
+
+    async def browser_fetch(url: str) -> str:
+        return await fetch_rendered_html(
+            url,
+            timeout_seconds=config.browser_timeout_seconds,
+            max_html_bytes=config.max_html_bytes,
+        )
+
+    return ArticleArchiveService(
+        fetcher=DirectHtmlFetcher(
+            http,
+            timeout_seconds=config.http_timeout_seconds,
+            max_html_bytes=config.max_html_bytes,
+        ),
+        bridge=bridge,
+        browser_fetch=browser_fetch,
+        webdav=JianguoyunWebDav(jianguoyun.config),
+        remote_dir=config.remote_dir,
+        min_visible_characters=config.min_visible_characters,
+    )
 
 
 def _make_process_text(http, flomo, llm_key):
@@ -116,7 +222,16 @@ async def run_worker() -> None:
     if not dests:
         log.warning("worker_no_destinations_exit")
         return
-    log.info("worker_started", destinations=list(dests.keys()))
+    article_service = (
+        _build_article_archive_service(channels, http)
+        if channels.article_archive.enabled
+        else None
+    )
+    log.info(
+        "worker_started",
+        destinations=[kind.value for kind in dests],
+        article_archive=article_service is not None,
+    )
     llm_key = channels.llm.get("glm_api_key", "")
 
     # graceful shutdown 信号
@@ -129,7 +244,14 @@ async def run_worker() -> None:
     for kind in dests:
         lim = LIMITS[kind]
         if kind is ItemKind.LINK:
-            process_fn = _make_process_link(http, dests[kind], llm_key)
+            process_fn = _make_process_link(
+                http,
+                dests[kind],
+                llm_key,
+                queue_repo=queue_repo,
+                archive_enabled=article_service is not None,
+                archive_enqueue_attempts=channels.article_archive.enqueue_attempts,
+            )
         elif kind is ItemKind.TEXT:
             process_fn = _make_process_text(http, dests[kind], llm_key)
         else:
@@ -138,6 +260,19 @@ async def run_worker() -> None:
             consume(
                 kind, queue_repo, dedup, rate, process_fn, kind.value,
                 limits=lim,
+                stop_event=stop_event,
+            )
+        )
+    if article_service is not None:
+        tasks.append(
+            consume(
+                ItemKind.ARTICLE,
+                queue_repo,
+                dedup,
+                rate,
+                article_service.process,
+                ItemKind.ARTICLE.value,
+                limits=_article_limits(channels.article_archive),
                 stop_event=stop_event,
             )
         )
