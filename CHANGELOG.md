@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-16
+
+### docs(openspec)：规划 Cubox 后置文章 Markdown 归档
+
+- 新增 OpenSpec 变更 `add-article-markdown-archive`，定义 Cubox 成功后独立归档文章型网页的行为
+- 设计在现有 worker 镜像中集成固定版本 Defuddle，并复用 headed Playwright 作为内容不足时的兜底
+- 规定 Obsidian 安全文件名、完整 Properties、坚果云 `/我的坚果云/文章归档` 上传、存在跳过及独立重试/DLQ
+
+**如何验证**：
+- `openspec validate add-article-markdown-archive` → valid
+- `git diff --check` → passed
+
 ## 2026-07-11
 
 ### fix(x)：时间线导航不再等待网络完全空闲
