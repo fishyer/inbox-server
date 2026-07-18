@@ -53,6 +53,7 @@ def test_container_images_and_restart_policies_are_reproducible() -> None:
     assert services["server"]["ports"] == ["127.0.0.1:8000:8000"]
     assert services["server"]["depends_on"]["redis"]["condition"] == "service_healthy"
     assert services["worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
+    assert services["worker"]["depends_on"]["server"]["condition"] == "service_healthy"
 
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert "ghcr.io/astral-sh/uv:0.11.29" in dockerfile

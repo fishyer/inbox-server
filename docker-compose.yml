@@ -53,6 +53,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
+      server: {condition: service_healthy}
     volumes: ["./channels.yaml:/app/channels.yaml:ro"]
     # worker 跑 headed chromium，需 Xvfb 虚拟 X display
     # 不用 xvfb-run 作 PID1 包装：实测 xvfb-run 的 sh 作为容器 PID1 时，其 python 子进程不持久

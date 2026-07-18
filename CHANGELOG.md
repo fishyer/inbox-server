@@ -9,6 +9,7 @@
 - 固定 Postgres 16.14、Redis 7.4.9 与 uv 0.11.29 镜像版本，为 Postgres、Redis、server、worker 统一配置 `unless-stopped` 和健康检查
 - testing 服务器仅在回环地址发布 8000 端口，管理 API 通过 SSH 隧道访问，避免公网明文传输 API Key
 - 两套 CI 均配置 Node.js 与 pnpm，并按冻结锁文件安装 Defuddle/Eta，确保 Linux runner 执行真实 Node 桥接集成测试
+- worker 等待 server healthy 后再启动，避免首次空库中 `create_all` 兜底尚未完成时提前查询缺失表
 - 新增部署 ADR、OpenSpec 变更与部署文件契约测试
 
 **如何验证**：
