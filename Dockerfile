@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends xvfb curl \
     && rm -rf /var/lib/apt/lists/*
 
 # uv（astral 官方镜像二进制）
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /bin/uv
 
 WORKDIR /app
 

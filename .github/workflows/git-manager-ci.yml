@@ -1,0 +1,65 @@
+# 由 git-manager 生成，请勿手动编辑。
+name: git-manager CI
+
+on:
+  pull_request:
+
+    branches:
+
+      - "main"
+
+
+
+  push:
+
+    branches:
+
+      - "main"
+
+
+
+
+permissions:
+  contents: read
+
+
+concurrency:
+  group: "ci-${{ github.ref }}"
+  cancel-in-progress: true
+
+
+jobs:
+
+  quality:
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 30
+
+
+
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 配置 Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install uv==0.11.29 && uv sync --dev --frozen
+
+      - name: 质量检查 1
+        run: |
+          uv run ruff check src/inboxserver tests scripts
+
+      - name: 质量检查 2
+        run: |
+          uv run pytest tests/unit tests/integration -m "not e2e" --tb=short
+
+      - name: 质量检查 3
+        run: |
+          uv run mypy src/inboxserver --ignore-missing-imports

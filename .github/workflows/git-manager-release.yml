@@ -1,0 +1,224 @@
+# 由 git-manager 生成，请勿手动编辑。
+name: git-manager Deploy
+run-name: ${{ github.event_name == 'workflow_run' && format('deploy {0}', github.event.workflow_run.head_sha) || format('{0} {1}', inputs.action, inputs.tag) }}
+
+on:
+
+  workflow_run:
+    workflows:
+      - git-manager CI
+    types:
+      - completed
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy 或 rollback
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - rollback
+      tag:
+        description: 要部署的已有 Git tag
+        required: true
+        type: string
+      health_url:
+        description: 可选的部署后健康检查 URL
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: testing
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '66.154.103.14' }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'root' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || format('/apps/{0}', github.event.repository.name) }}
+      HEALTH_URL: ${{ inputs.health_url || '' }}
+
+      DEPLOY_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.tag }}
+
+    steps:
+      - name: 检出部署 tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_REF }}
+          fetch-depth: 0
+
+      - name: 解析发布目标
+        run: |
+          set -eu
+          TARGET_SHA="$(git rev-parse HEAD)"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHORT_SHA="$(printf '%s' "$TARGET_SHA" | cut -c1-7)"
+            TAG="release-0.1.0-$SHORT_SHA"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+
+          test -n "$TAG"
+          SAFE_TAG="$(printf '%s' "$TAG" | sed 's#[/[:space:]]#-#g')"
+          ARCHIVE="${{ github.event.repository.name }}-${SAFE_TAG}.zip"
+          printf 'TARGET_SHA=%s\n' "$TARGET_SHA" >> "$GITHUB_ENV"
+          printf 'TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
+          printf 'SAFE_TAG=%s\n' "$SAFE_TAG" >> "$GITHUB_ENV"
+          printf 'ARCHIVE=%s\n' "$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: 校验部署配置
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -f git-manager.yml
+          test -f entrypoint.sh
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$DEPLOY_SSH_PRIVATE_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+
+      - name: 创建部署归档
+        run: |
+          set -eu
+          git archive --format=zip --output "$ARCHIVE" HEAD
+
+
+      - name: 创建或复用 GitHub Release
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          git fetch --force --tags origin
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            if [ "$TAG_SHA" != "$TARGET_SHA" ]; then
+              printf 'tag %s 已指向其它提交\n' "$TAG" >&2
+              exit 1
+            fi
+          else
+            git tag "$TAG" "$TARGET_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" --clobber
+          else
+            gh release create "$TAG" "$ARCHIVE" --verify-tag --title "$TAG" --generate-notes
+          fi
+
+
+      - name: 配置 SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: 部署并执行入口脚本
+        run: |
+          set -eu
+          REMOTE_ARCHIVE="/tmp/$ARCHIVE"
+          scp -P "$DEPLOY_PORT" "$ARCHIVE" "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_ARCHIVE"
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" sh -s -- "$DEPLOY_PATH" "$SAFE_TAG" "$REMOTE_ARCHIVE" <<'REMOTE'
+          set -eu
+          DEPLOY_PATH=$1
+          TAG=$2
+          ARCHIVE=$3
+          RELEASE_DIR="$DEPLOY_PATH/releases/$TAG"
+          PREVIOUS_TARGET="$(readlink "$DEPLOY_PATH/current" 2>/dev/null || true)"
+          PREVIOUS_FILE="$DEPLOY_PATH/.git-manager-previous"
+          printf '%s\n' "$PREVIOUS_TARGET" > "$PREVIOUS_FILE"
+          rollback() {
+            if [ -n "$PREVIOUS_TARGET" ]; then
+              ln -sfn "$PREVIOUS_TARGET" "$DEPLOY_PATH/current"
+              if [ -x "$DEPLOY_PATH/current/entrypoint.sh" ]; then
+                cd "$DEPLOY_PATH/current"
+                export DEPLOY_RELEASE_TAG="$(basename "$PREVIOUS_TARGET")"
+                ./entrypoint.sh || true
+              fi
+            else
+              rm -f "$DEPLOY_PATH/current"
+            fi
+          }
+          mkdir -p "$RELEASE_DIR"
+          unzip -oq "$ARCHIVE" -d "$RELEASE_DIR"
+          rm -f "$ARCHIVE"
+          ln -sfn "$RELEASE_DIR" "$DEPLOY_PATH/current"
+          chmod +x "$DEPLOY_PATH/current/entrypoint.sh"
+          cd "$DEPLOY_PATH/current"
+          export DEPLOY_RELEASE_TAG="$TAG"
+          if ! ./entrypoint.sh; then
+            rollback
+            exit 1
+          fi
+          REMOTE
+
+      - name: 健康检查并在失败时回滚
+        run: |
+          set -eu
+          if [ -z "$HEALTH_URL" ]; then
+            exit 0
+          fi
+          if curl --fail --silent --show-error --retry 5 --retry-delay 3 "$HEALTH_URL"; then
+            exit 0
+          fi
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" sh -s -- "$DEPLOY_PATH" <<'REMOTE'
+          set -eu
+          DEPLOY_PATH=$1
+          PREVIOUS_FILE="$DEPLOY_PATH/.git-manager-previous"
+          PREVIOUS_TARGET="$(cat "$PREVIOUS_FILE" 2>/dev/null || true)"
+          if [ -n "$PREVIOUS_TARGET" ]; then
+            ln -sfn "$PREVIOUS_TARGET" "$DEPLOY_PATH/current"
+            if [ -x "$DEPLOY_PATH/current/entrypoint.sh" ]; then
+              cd "$DEPLOY_PATH/current"
+              export DEPLOY_RELEASE_TAG="$(basename "$PREVIOUS_TARGET")"
+              ./entrypoint.sh || true
+            fi
+          else
+            rm -f "$DEPLOY_PATH/current"
+          fi
+          REMOTE
+          exit 1
+
+      - name: 清理旧发布目录
+        run: |
+          set -eu
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" sh -s -- "$DEPLOY_PATH" "5" <<'REMOTE'
+          set -eu
+          DEPLOY_PATH=$1
+          RETAIN=$2
+          RELEASES="$DEPLOY_PATH/releases"
+          test -d "$RELEASES" || exit 0
+          find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -print \
+            | sort -r \
+            | awk -v retain="$RETAIN" 'NR > retain' \
+            | while IFS= read -r old_release; do rm -rf "$old_release"; done
+          REMOTE

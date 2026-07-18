@@ -1,0 +1,25 @@
+# git-manager 管理的仓库版本、CI 与 testing CD。
+version: 0.1.0
+
+ci:
+  branches: [main]
+  concurrency:
+    group: ci-${{ github.ref }}
+    cancelInProgress: true
+  jobs:
+    - id: quality
+      stack: python
+      runner: ubuntu-latest
+      timeoutMinutes: 30
+      installCommand: python -m pip install uv==0.11.29 && uv sync --dev --frozen
+      checkCommands:
+        - uv run ruff check src/inboxserver tests scripts
+        - uv run pytest tests/unit tests/integration -m "not e2e" --tb=short
+        - uv run mypy src/inboxserver --ignore-missing-imports
+
+cd:
+  environment: testing
+  runner: ubuntu-latest
+  timeoutMinutes: 30
+  retainReleases: 5
+  autoDeploy: true

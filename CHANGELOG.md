@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2026-07-18
+
+### feat(ci)：新增 GitHub Actions 自动 Release 与 testing Docker 部署
+
+- 使用 git-manager 生成独立质量门禁与 Release/CD workflow；`main` 的 git-manager CI 成功后复用 `release-<version>-<sha7>` 并通过 `testing` Environment 执行 SSH 部署
+- 新增参数化 `entrypoint.sh`，从服务器 `shared` 目录连接 `.env`、`channels.yaml`，固定 Compose 项目名并校验四个服务、重启策略、健康接口和持久化卷
+- 固定 Postgres 16.14、Redis 7.4.9 与 uv 0.11.29 镜像版本，为 Postgres、Redis、server、worker 统一配置 `unless-stopped` 和健康检查
+- 新增部署 ADR、OpenSpec 变更与部署文件契约测试；现有 `.github/workflows/ci.yml` 保持不变
+
+**如何验证**：
+- `openspec validate add-github-cicd` → valid
+- `docs-manager audit` → 未发现问题
+- `sh -n entrypoint.sh` 与部署入口 fake Docker 行为测试 → passed
+- 两个 git-manager workflow 使用 YAML 解析器校验 → valid
+- `docker compose -p inbox-server --env-file .env -f docker-compose.yml config --quiet` → passed
+- `uv run ruff check src/inboxserver tests scripts` → passed
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 224 passed（8 个既有 warning）
+- `uv run mypy src/inboxserver --ignore-missing-imports` → passed
+
 ## 2026-07-17
 
 ### fix(link)：每日最多 500 条并取消 6 小时限制

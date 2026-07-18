@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "mode": "managed",
+  "rulesSource": "AGENTS.md",
+  "docsRoot": "docs",
+  "docsIndex": null,
+  "requiredSections": [],
+  "optionalSections": [],
+  "customSections": [],
+  "authorities": {
+    "requirement": "openspec",
+    "context": null,
+    "glossary": null,
+    "adr": "docs/adr",
+    "review": null,
+    "testing": null,
+    "research": null,
+    "plan": "openspec"
+  },
+  "forbiddenPaths": [],
+  "allowedDuplicateSourcePaths": [],
+  "language": "zh-CN"
+}
