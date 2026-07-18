@@ -16,6 +16,7 @@ def test_article_archive_defaults_to_disabled(tmp_path) -> None:
     assert config.article_archive.enabled is False
     assert config.article_archive.remote_dir == "/我的坚果云/文章归档"
     assert config.article_archive.min_visible_characters == 200
+    assert config.article_archive.daily_limit == 10_000
 
 
 def test_article_archive_loads_typed_limits(tmp_path) -> None:

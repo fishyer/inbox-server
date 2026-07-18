@@ -48,7 +48,7 @@ article_archive:
   enqueue_attempts: 3
   rate_window_count: 60
   rate_window_seconds: 3600
-  daily_limit: 200
+  daily_limit: 10000
   interval_seconds: 5
 
 credentials: {}

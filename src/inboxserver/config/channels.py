@@ -39,7 +39,7 @@ class ArticleArchiveConfig(BaseModel):
     enqueue_attempts: int = Field(default=3, ge=1, le=10)
     rate_window_count: int = Field(default=60, gt=0)
     rate_window_seconds: int = Field(default=3600, gt=0)
-    daily_limit: int | None = Field(default=200, gt=0)
+    daily_limit: int | None = Field(default=10_000, gt=0)
     interval_seconds: float = Field(default=5, ge=0)
 
 

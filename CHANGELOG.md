@@ -2,6 +2,19 @@
 
 ## 2026-07-18
 
+### fix(article)：每日上限提高至 10,000 条
+
+- 将文章归档默认、当前部署和示例配置的每日处理上限从 200 提高至 10,000，保留每小时 60 条窗口限速
+- 确认 article Playwright 兜底复用 worker 进程级 headed Chromium 单例，每篇文章使用并关闭独立 context
+
+**如何验证**：
+- 配置契约测试覆盖默认 `daily_limit=10000`
+- 源码调用链与容器进程检查确认只有一个 Chromium 主进程
+- `uv run ruff check src/inboxserver tests scripts` → passed
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 225 passed（8 个既有 warning）
+- `uv run mypy src/inboxserver --ignore-missing-imports` → passed
+- 本机 OrbStack worker 重建后为 healthy，容器运行时限额为每小时 60、每天 10,000
+
 ### fix(article)：移除归档正文中的小说阅读器提示
 
 - Defuddle 渲染入口只过滤独立成行的“在小说阅读器读本章”和“去阅读”，保留正文句子中的同名词组
