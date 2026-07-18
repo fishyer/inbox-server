@@ -14,6 +14,7 @@
 - `docs-manager audit` → 未发现问题
 - `sh -n entrypoint.sh` 与部署入口 fake Docker 行为测试 → passed
 - 两个 git-manager workflow 使用 YAML 解析器校验 → valid
+- GitHub `testing` Environment → 4 个部署变量与 2 个 SSH secrets 已配置（仅核对名称）
 - `docker compose -p inbox-server --env-file .env -f docker-compose.yml config --quiet` → passed
 - `uv run ruff check src/inboxserver tests scripts` → passed
 - `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 224 passed（8 个既有 warning）
