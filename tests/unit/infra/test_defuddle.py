@@ -76,6 +76,28 @@ async def test_defuddle_bridge_render_success(monkeypatch, tmp_path) -> None:
     assert json.loads(process.input)["action"] == "render"
 
 
+async def test_defuddle_bridge_render_removes_standalone_reader_cta_lines(
+    monkeypatch, tmp_path
+) -> None:
+    process = _Process(json.dumps({"ok": True, "markdown": "---\ntitle: x\n---\n正文\n"}).encode())
+    monkeypatch.setattr(
+        module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=process),
+    )
+    bridge = DefuddleBridge(script_path=tmp_path / "bridge.mjs")
+
+    await bridge.render(
+        {"title": "x", "source_url": "https://example.com", "tags": []},
+        "正文第一段\n\n在小说阅读器读本章\n\n  去阅读  \n\n我准备去阅读更多资料。",
+    )
+
+    forwarded = json.loads(process.input)["markdown"]
+    assert "在小说阅读器读本章" not in {line.strip() for line in forwarded.splitlines()}
+    assert "去阅读" not in {line.strip() for line in forwarded.splitlines()}
+    assert "我准备去阅读更多资料。" in forwarded
+
+
 async def test_defuddle_bridge_rejects_input_and_output_over_limits(monkeypatch, tmp_path) -> None:
     spawn = AsyncMock()
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)

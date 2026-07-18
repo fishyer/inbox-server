@@ -2,6 +2,19 @@
 
 ## 2026-07-18
 
+### fix(article)：移除归档正文中的小说阅读器提示
+
+- Defuddle 渲染入口只过滤独立成行的“在小说阅读器读本章”和“去阅读”，保留正文句子中的同名词组
+- 清理 148 个历史归档文件并覆盖同步至坚果云 WebDAV；修改前逐文件备份
+
+**如何验证**：
+- `uv run ruff check src/inboxserver tests scripts` → passed
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 225 passed（8 个既有 warning）
+- `uv run mypy src/inboxserver --ignore-missing-imports` → passed
+- 历史文件差异审计 → 仅删除 296 行提示及两行之间的 148 个空行，未新增或删除其它正文
+- WebDAV 回读逐字节校验 → 148/148 一致，归档目录剩余无效提示行 0
+- 本机 OrbStack worker 重建后为 healthy，容器内真实 Defuddle→Eta 渲染检查通过
+
 ### feat(ci)：新增 GitHub Actions 自动 Release 与 testing Docker 部署
 
 - 使用 git-manager 生成独立质量门禁与 Release/CD workflow；`main` 的 git-manager CI 成功后复用 `release-<version>-<sha7>` 并通过 `testing` Environment 执行 SSH 部署

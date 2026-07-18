@@ -11,6 +11,16 @@ from inboxserver.domain.policy.article_archive import DefuddleArticle
 
 DEFAULT_BRIDGE_PATH = Path(__file__).parents[4] / "scripts/article-archive.mjs"
 _SAFE_ERROR = re.compile(r"^[a-z0-9_]{1,64}$")
+_READER_CTA_LINES = frozenset({"在小说阅读器读本章", "去阅读"})
+
+
+def _remove_reader_cta_lines(markdown: str) -> str:
+    """只移除独立成行的阅读器提示，避免误删正文中的同名词组。"""
+    return "".join(
+        line
+        for line in markdown.splitlines(keepends=True)
+        if line.strip() not in _READER_CTA_LINES
+    )
 
 
 class DefuddleError(RuntimeError):
@@ -51,7 +61,11 @@ class DefuddleBridge:
     async def render(self, metadata: dict, markdown: str) -> str:
         """使用 Eta 模板渲染稳定 Obsidian Properties 与正文。"""
         result = await self._run(
-            {"action": "render", "metadata": metadata, "markdown": markdown}
+            {
+                "action": "render",
+                "metadata": metadata,
+                "markdown": _remove_reader_cta_lines(markdown),
+            }
         )
         rendered = result.get("markdown")
         if not isinstance(rendered, str) or not rendered.strip():
