@@ -4,17 +4,19 @@
 
 ### feat(console)：新增 React 同源运维控制台
 
-- FastAPI 同源提供 React/Vite 控制台，使用现有管理 API Key 在当前标签页会话内鉴权
+- Nginx 在唯一宿主机端口同源提供 React/Vite 控制台并反向代理 FastAPI，使用现有管理 API Key 在当前标签页会话内鉴权
 - 新增服务、worker 心跳、10 分钟调度、渠道、队列、同步运行和文章归档结果视图，并支持手动同步与刷新
 - 同步运行和文章归档终态写入 PostgreSQL；worker 心跳写入带 TTL 的 Redis，观测写入失败不改变原业务结果
-- Docker 镜像在构建阶段生成前端静态资源，由 FastAPI 提供根页面和带哈希资源
+- Docker 镜像在构建阶段生成前端静态资源，由固定版本 Nginx 提供根页面和带哈希资源；FastAPI 仅在 Compose 内网提供 API
 
 **如何验证**：
 - `pnpm test:web` → 5 passed
 - `pnpm typecheck:web` → passed
 - `pnpm build:web` → passed
+- `uv run pytest tests/unit/test_deployment_files.py --tb=short` → 3 passed
+- `docker compose config --quiet` 与 `sh -n entrypoint.sh` → passed
 - `uv run ruff check src/inboxserver tests scripts` → passed
-- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 243 passed（8 个既有 warning）
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 243 passed（9 个既有环境/测试 warning）
 - `uv run mypy src/inboxserver --ignore-missing-imports` → passed
 - 未运行自动化 E2E：当前任务未授权浏览器自动化，部署后改用 HTTP、数据库和容器状态做实际验证
 

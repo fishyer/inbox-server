@@ -31,7 +31,7 @@ compose config --quiet
 compose up -d --build --remove-orphans --wait --wait-timeout "$DEPLOY_TIMEOUT"
 
 running_services="$(compose ps --services --status running)"
-for service in postgres redis server worker; do
+for service in postgres redis server worker console; do
   printf '%s\n' "$running_services" | grep -Fqx "$service" || {
     printf '服务未运行：%s\n' "$service" >&2
     exit 1

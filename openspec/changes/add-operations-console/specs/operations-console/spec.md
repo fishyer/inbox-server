@@ -67,8 +67,8 @@ worker MUST 定期写入带过期时间的 Redis 心跳；运维接口 SHALL 仅
 - **THEN** 页面反馈完成并刷新队列和运行历史
 
 ### Requirement: 同源静态交付
-生产镜像 MUST 在构建阶段生成前端静态资源，并由 FastAPI 同一端口提供根页面和静态资源；静态挂载 MUST NOT 遮蔽现有 API、OpenAPI 或健康检查路径。
+生产镜像 MUST 在构建阶段生成前端静态资源，并由 Nginx 在唯一宿主机端口提供根页面和静态资源、反向代理 FastAPI；FastAPI MUST NOT 直接暴露宿主机端口，代理规则 MUST NOT 遮蔽现有 API、OpenAPI 或健康检查路径。
 
 #### Scenario: 部署后访问根页面和 API
-- **WHEN** 新镜像启动且数据库迁移完成
+- **WHEN** Nginx、FastAPI 新镜像启动且数据库迁移完成
 - **THEN** `/` 返回控制台，`/assets/*` 返回静态资源，既有 API 路径继续按原契约响应

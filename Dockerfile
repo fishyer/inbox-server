@@ -14,6 +14,11 @@ RUN pnpm install --frozen-lockfile
 COPY web ./web
 RUN pnpm build:web
 
+FROM nginx:1.30.3-alpine3.23 AS console
+
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /web-build/web/dist /usr/share/nginx/html
+
 # 用 playwright 官方镜像（已预装 chromium + 全套系统依赖），避免 install 网络/超时卡住
 # tag 格式 v{version}（不是 1.60，是 v1.60.0）
 FROM mcr.microsoft.com/playwright/python:v1.60.0

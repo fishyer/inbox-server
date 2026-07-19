@@ -33,7 +33,6 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-    ports: ["127.0.0.1:8000:8000"]
     volumes: ["./channels.yaml:/app/channels.yaml:ro"]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
@@ -43,6 +42,21 @@ services:
       start_period: 20s
     # 启动前 alembic 建表/迁移，再起 uvicorn（生产 schema 由 alembic 管，lifespan create_all 兜底）
     command: ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn inboxserver.main:app --host 0.0.0.0 --port 8000"]
+
+  console:
+    build:
+      context: .
+      target: console
+    restart: unless-stopped
+    depends_on:
+      server: {condition: service_healthy}
+    ports: ["127.0.0.1:8000:80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   worker:
     build: .

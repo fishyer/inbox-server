@@ -47,10 +47,13 @@ def test_container_images_and_restart_policies_are_reproducible() -> None:
 
     assert services["postgres"]["image"] == "postgres:16.14-bookworm"
     assert services["redis"]["image"] == "redis:7.4.9-bookworm"
-    for name in ("postgres", "redis", "server", "worker"):
+    for name in ("postgres", "redis", "server", "worker", "console"):
         assert services[name]["restart"] == "unless-stopped"
         assert "healthcheck" in services[name]
-    assert services["server"]["ports"] == ["127.0.0.1:8000:8000"]
+    assert "ports" not in services["server"]
+    assert services["console"]["ports"] == ["127.0.0.1:8000:80"]
+    assert services["console"]["build"]["target"] == "console"
+    assert services["console"]["depends_on"]["server"]["condition"] == "service_healthy"
     assert services["server"]["depends_on"]["redis"]["condition"] == "service_healthy"
     assert services["worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
     assert services["worker"]["depends_on"]["server"]["condition"] == "service_healthy"
@@ -60,6 +63,12 @@ def test_container_images_and_restart_policies_are_reproducible() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert "ghcr.io/astral-sh/uv:0.11.29" in dockerfile
     assert "ghcr.io/astral-sh/uv:latest" not in dockerfile
+    assert "nginx:1.30.3-alpine3.23" in dockerfile
+
+    nginx_config = (ROOT / "deploy/nginx.conf").read_text()
+    assert "location = /" in nginx_config
+    assert "location /assets/" in nginx_config
+    assert "proxy_pass http://server:8000" in nginx_config
 
 
 def test_entrypoint_links_shared_config_and_uses_fixed_compose_project(tmp_path: Path) -> None:
@@ -84,7 +93,7 @@ printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
 case "$*" in
   "compose version") exit 0 ;;
   *" ps --services --status running")
-    printf 'postgres\nredis\nserver\nworker\n'
+    printf 'postgres\nredis\nserver\nworker\nconsole\n'
     ;;
   *" ps -q "*)
     for service do :; done

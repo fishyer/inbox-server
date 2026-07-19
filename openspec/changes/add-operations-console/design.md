@@ -10,7 +10,7 @@ inbox-server 当前通过 FastAPI、APScheduler、Redis、PostgreSQL 和独立 w
 - 让手动与定时同步共用同一个运行记录函数，并将结果持久化到现有 `sync_jobs` 表。
 - 将文章归档终态持久化到 PostgreSQL，同时确保记录失败不改变归档结果。
 - 复用 `X-API-Key`，仅在浏览器 `sessionStorage` 保存用户输入的 Key。
-- 在现有 Docker 镜像构建 React 静态资源，并由 FastAPI 同源提供。
+- 在构建阶段生成 React 静态资源，由 Nginx 提供页面并在同一 origin 反向代理 FastAPI。
 
 **Non-Goals:**
 
@@ -21,9 +21,9 @@ inbox-server 当前通过 FastAPI、APScheduler、Redis、PostgreSQL 和独立 w
 
 ## Decisions
 
-### React + TypeScript + Vite 单页，由 FastAPI 同源提供
+### React + TypeScript + Vite 单页，由 Nginx 统一同源入口
 
-前端放在 `web/`，构建产物由 FastAPI 明确挂载 `/assets` 并在 `/` 返回 `index.html`。同源部署避免新增容器、CORS 和第二套认证边界。备选 Next.js 会增加 Node 运行服务与部署状态，不符合轻量运维控制台目标；服务端模板难以维持组件化交互和类型契约。
+前端放在 `web/`，构建产物由 Nginx 提供 `/` 与 `/assets/*`，其它路径原样反向代理到内部 FastAPI。宿主机只暴露 Nginx 的 `127.0.0.1:8000`，避免 CORS 和第二套认证边界；FastAPI 保留静态交付能力作为镜像内回退，但不再直接暴露端口。备选由 FastAPI 直接提供页面虽然容器更少，但把静态资源交付和 API 生命周期耦合；Next.js 会增加 Node 运行服务与部署状态，不符合轻量运维控制台目标。
 
 ### 使用面向控制台的聚合读 API
 
@@ -52,8 +52,8 @@ inbox-server 当前通过 FastAPI、APScheduler、Redis、PostgreSQL 和独立 w
 ## Migration Plan
 
 1. 先应用 Alembic 迁移新增 `article_archive_events`。
-2. 部署包含静态资源、API、同步记录和 worker 心跳的新镜像。
-3. 依次验证迁移、server 健康、worker 心跳、`/api/operations/overview` 和根页面。
+2. 部署包含静态资源的 Nginx 镜像，以及 API、同步记录和 worker 心跳的新应用镜像。
+3. 依次验证迁移、内部 server 健康、Nginx 健康、worker 心跳、`/api/operations/overview` 和根页面。
 4. 回滚时恢复上一镜像；新增表保留且不影响旧代码，避免破坏性 downgrade。
 
 ## Open Questions
