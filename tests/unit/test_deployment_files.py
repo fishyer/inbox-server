@@ -53,6 +53,7 @@ def test_container_images_and_restart_policies_are_reproducible() -> None:
     assert "ports" not in services["server"]
     assert services["console"]["ports"] == ["127.0.0.1:8000:80"]
     assert services["console"]["build"]["target"] == "console"
+    assert "-Y off" in " ".join(services["console"]["healthcheck"]["test"])
     assert services["console"]["depends_on"]["server"]["condition"] == "service_healthy"
     assert services["server"]["depends_on"]["redis"]["condition"] == "service_healthy"
     assert services["worker"]["depends_on"]["redis"]["condition"] == "service_healthy"

@@ -25,7 +25,7 @@
 - [x] 4.1 创建 React 同源运维控制台 ADR 并更新 CHANGELOG
 - [x] 4.2 运行前端测试/类型检查/构建和后端四件套验证
 - [x] 4.3 运行 OpenSpec、docs-manager 与 GitNexus 变更检查
-- [ ] 4.4 重建 server/worker，验证迁移、健康、心跳、API、页面与 10 分钟调度
+- [x] 4.4 重建 server/worker，验证迁移、健康、心跳、API、页面与 10 分钟调度
 - [x] 4.5 精确暂存本变更，commit、push 并确认远端一致
 - [x] 4.6 更新 ADR、CHANGELOG 并重新运行 OpenSpec、文档和交付检查
 - [x] 4.7 精确提交并推送 Nginx 同源入口补充

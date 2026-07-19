@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-07-20
+
+### fix(console)：健康探针绕过宿主代理
+
+- console 容器的本地 `wget` 健康探针显式禁用代理，避免代理环境把 `127.0.0.1/healthz` 转发到宿主代理并误报 404
+- 完成五服务实际重建，确认 Nginx 同源入口、worker 心跳与 10 分钟调度生效
+
+**如何验证**：
+- 部署契约测试先复现失败，修复后通过
+- `docker compose config --quiet` 与 console 重建 dry-run → passed
+- `docker compose up -d --build` → server、worker、console 镜像构建成功，五个容器均 healthy
+- `GET /`、`GET /healthz`、`GET /readyz` → 200；未鉴权运维 API → 401
+- 运维概览显示 worker online、scheduler enabled、`interval_seconds=600`
+
 ## 2026-07-19
 
 ### feat(console)：新增 React 同源运维控制台
