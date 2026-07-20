@@ -52,6 +52,16 @@ LIMITS: dict[ItemKind, QueueLimits] = {
 }
 
 
+def _worker_redis_options() -> dict[str, int | bool]:
+    """限制 Redis 网络等待，避免 VM 抖动后 worker 永久卡在失效连接。"""
+    return {
+        "socket_connect_timeout": 5,
+        "socket_timeout": 10,
+        "health_check_interval": 30,
+        "retry_on_timeout": True,
+    }
+
+
 async def _enqueue_article_archive(
     queue_repo: RedisQueueRepository,
     payload: dict,
@@ -225,7 +235,7 @@ async def run_worker() -> None:
     """
     channels = load_channels()
     http: httpx.AsyncClient = make_http_client()
-    queue_redis = aioredis.from_url(settings.redis_url)
+    queue_redis = aioredis.from_url(settings.redis_url, **_worker_redis_options())
     queue_repo = RedisQueueRepository(queue_redis)
     dedup = DedupStore(queue_redis)
     rate = RateGuard(queue_redis)

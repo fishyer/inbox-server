@@ -163,7 +163,7 @@ async def test_run_worker_disabled_does_not_start_article_consumer(monkeypatch) 
     cubox = AsyncMock()
     monkeypatch.setattr(runner, "load_channels", lambda: channels)
     monkeypatch.setattr(runner, "make_http_client", lambda: AsyncMock())
-    monkeypatch.setattr(runner.aioredis, "from_url", lambda _: object())
+    monkeypatch.setattr(runner.aioredis, "from_url", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(runner, "RedisQueueRepository", lambda _: AsyncMock())
     monkeypatch.setattr(runner, "DedupStore", lambda _: AsyncMock())
     monkeypatch.setattr(runner, "RateGuard", lambda _: AsyncMock())
@@ -182,3 +182,12 @@ async def test_run_worker_disabled_does_not_start_article_consumer(monkeypatch) 
     assert consume.await_count == 1
     assert consume.call_args.args[0] is ItemKind.LINK
     heartbeat.assert_awaited_once()
+
+
+def test_worker_redis_options_bound_stale_connections() -> None:
+    assert runner._worker_redis_options() == {
+        "socket_connect_timeout": 5,
+        "socket_timeout": 10,
+        "health_check_interval": 30,
+        "retry_on_timeout": True,
+    }

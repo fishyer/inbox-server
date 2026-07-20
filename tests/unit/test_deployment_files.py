@@ -72,6 +72,14 @@ def test_container_images_and_restart_policies_are_reproducible() -> None:
     assert "proxy_pass http://server:8000" in nginx_config
 
 
+def test_worker_healthcheck_uses_redis_heartbeat_instead_of_pid() -> None:
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    command = " ".join(compose["services"]["worker"]["healthcheck"]["test"])
+
+    assert "python -m inboxserver.workers.healthcheck" in command
+    assert "pgrep" not in command
+
+
 def test_entrypoint_links_shared_config_and_uses_fixed_compose_project(tmp_path: Path) -> None:
     deploy_root = tmp_path / "inbox-server"
     release = deploy_root / "releases" / "release-test"

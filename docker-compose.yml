@@ -77,8 +77,8 @@ services:
     # 改为手动后台起 Xvfb + exec python：runner 直接成为 PID1，信号直达，graceful shutdown 正常
     command: ["sh", "-c", "rm -f /tmp/.X99-lock /tmp/.X11-unix/X99; Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp & export DISPLAY=:99 && exec /app/.venv/bin/python -m inboxserver.workers.runner"]
     healthcheck:
-      # 进程级检查：runner 进程不在即 unhealthy（runner 作 PID1 崩即容器停 + restart 自动拉起）
-      test: ["CMD-SHELL", "pgrep -f 'inboxserver.workers.runner' >/dev/null || exit 1"]
+      # 心跳由 worker 事件循环刷新；PID 存活但消费循环停摆时也会变为 unhealthy。
+      test: ["CMD", "/app/.venv/bin/python", "-m", "inboxserver.workers.healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -2,6 +2,20 @@
 
 ## 2026-07-20
 
+### fix(worker)：以 Redis 心跳识别消费停摆
+
+- worker 容器健康检查由仅检查 PID 改为校验 Redis TTL 心跳，事件循环停摆时不再误报 healthy
+- worker 的 Redis 连接增加连接与读取超时、连接健康检查和超时重试，避免底层连接失效后无限等待
+
+**如何验证**：
+- 定向单元测试覆盖新鲜、缺失、过期和损坏心跳，以及 Redis 超时参数与 Compose 探针契约
+- 重建 worker 后确认真实心跳探针成功、隔离无心跳 Redis DB 探针失败，容器越过启动宽限期后为 healthy
+- 跨两个心跳周期确认时间戳持续刷新；运维 API 显示 worker online、10 分钟调度生效，link 队列继续消费并实际生成、提交及推送 Markdown 文章
+- `uv run ruff check src/inboxserver tests scripts` → passed
+- `uv run pytest tests/unit tests/integration -m "not e2e" --tb=short` → 247 passed（8 个既有 warning）
+- `uv run mypy src/inboxserver --ignore-missing-imports`、`docker compose config --quiet`、`sh -n entrypoint.sh` 与 `openspec validate add-operations-console` → passed
+- 未运行自动化 E2E：当前任务未授权浏览器自动化，改用容器探针、Redis 心跳、运维 API、队列进度与真实文章归档验证
+
 ### fix(console)：健康探针绕过宿主代理
 
 - console 容器的本地 `wget` 健康探针显式禁用代理，避免代理环境把 `127.0.0.1/healthz` 转发到宿主代理并误报 404
